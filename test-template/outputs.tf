@@ -6,3 +6,7 @@ output "cloud-run-1_service_uri" {
   description = "The main URI in which this Service is serving traffic."
   value       = module.cloud-run-1.service_uri
 }
+output "cloud-run-2_service_uri" {
+  description = "The main URI in which this Service is serving traffic."
+  value       = module.cloud-run-2.service_uri
+}

@@ -6,8 +6,8 @@ module "cloud-run-1" {
   source                        = "github.com/GoogleCloudPlatform/terraform-google-cloud-run//modules/v2?ref=v0.16.3"
   project_id                    = "nnaka2992-app-design-center"
   location                      = "asia-east1"
-  service_name                  = "test"
-  containers                    = [{"container_image" = "us-docker.pkg.dev/cloudrun/container/hello", "container_name" = "service-container", "env_secret_vars" = {"secret_manager_1_SECRET" = module.secret-manager-1.env_vars.SECRET}, "env_vars" = {"sql_postgresql_1_CLOUD_SQL_DATABASE_CONNECTION_NAME" = module.sql-postgresql-1.instance_connection_name, "sql_postgresql_1_CLOUD_SQL_DATABASE_HOST" = module.sql-postgresql-1.instance_first_ip_address, "sql_postgresql_1_CLOUD_SQL_DATABASE_NAME" = module.sql-postgresql-1.env_vars.CLOUD_SQL_DATABASE_NAME}, "ports" = {"container_port" = 8080, "name" = "http1"}, "resources" = {"cpu_idle" = true, "startup_cpu_boost" = false}}]
+  service_name                  = "backend-test"
+  containers                    = [{"env_vars" = {"sql_postgresql_1_CLOUD_SQL_DATABASE_CONNECTION_NAME" = module.sql-postgresql-1.instance_connection_name, "sql_postgresql_1_CLOUD_SQL_DATABASE_HOST" = module.sql-postgresql-1.instance_first_ip_address, "sql_postgresql_1_CLOUD_SQL_DATABASE_NAME" = module.sql-postgresql-1.env_vars.CLOUD_SQL_DATABASE_NAME}, "ports" = {"container_port" = 8080, "name" = "http1"}, "resources" = {"cpu_idle" = true, "startup_cpu_boost" = false}, "container_image" = "us-docker.pkg.dev/cloudrun/container/hello", "container_name" = "service-container", "env_secret_vars" = {"secret_manager_1_SECRET" = module.secret-manager-1.env_vars.SECRET}}]
   service_account_project_roles = concat(["roles/secretmanager.secretAccessor"], ["roles/cloudsql.instanceUser", "roles/cloudsql.client"])
   vpc_access = {
     egress = "ALL_TRAFFIC"
@@ -37,7 +37,7 @@ module "sql-postgresql-1" {
   user_name                   = "postgres"
   user_password               = "password123"
   deletion_protection         = false
-  database_flags              = [{"value" = "on", "name" = "cloudsql.iam_authentication"}]
+  database_flags              = [{"name" = "cloudsql.iam_authentication", "value" = "on"}]
   data_cache_enabled          = false
   tier                        = "db-perf-optimized-N-8"
   deletion_protection_enabled = false
@@ -53,16 +53,34 @@ module "sql-postgresql-1" {
   }]
   depends_on = [module.project-services-nnaka2992-app-design-center]
 }
+module "cloud-run-2" {
+  source                        = "github.com/GoogleCloudPlatform/terraform-google-cloud-run//modules/v2?ref=v0.16.3"
+  project_id                    = "nnaka2992-app-design-center"
+  location                      = "asia-east1"
+  service_name                  = "front-test"
+  containers                    = [{"ports" = {"container_port" = 8080, "name" = "http1"}, "resources" = {"cpu_idle" = true, "startup_cpu_boost" = false}, "container_image" = "us-docker.pkg.dev/cloudrun/container/hello", "container_name" = "service-container", "env_vars" = {"cloud_run_1_SERVICE_ENDPOINT" = module.cloud-run-1.service_uri}}]
+  service_account_project_roles = ["roles/run.invoker"]
+  vpc_access = {
+    egress = "ALL_TRAFFIC"
+    network_interfaces = {
+      network    = "default"
+      subnetwork = "default"
+    }
+  }
+  cloud_run_deletion_protection = false
+  enable_prometheus_sidecar     = true
+  depends_on                    = [module.project-services-nnaka2992-app-design-center]
+}
 module "apphub" {
   source         = "github.com/GoogleCloudPlatform/terraform-google-apphub?ref=v0.3.0"
   project_id     = var.apphub_project_id
   location       = var.apphub_location
-  service_uris   = concat([module.cloud-run-1.apphub_service_uri], [module.sql-postgresql-1.apphub_service_uri])
+  service_uris   = concat([module.cloud-run-1.apphub_service_uri], [module.sql-postgresql-1.apphub_service_uri], [module.cloud-run-2.apphub_service_uri])
   application_id = var.apphub_application_id
 }
 module "project-services-nnaka2992-app-design-center" {
   source                      = "github.com/terraform-google-modules/terraform-google-project-factory//modules/project_services?ref=v17.1.0"
   project_id                  = "nnaka2992-app-design-center"
   disable_services_on_destroy = false
-  activate_apis               = ["storage-api.googleapis.com", "compute.googleapis.com", "pubsub.googleapis.com", "cloudscheduler.googleapis.com", "cloudresourcemanager.googleapis.com", "cloudkms.googleapis.com", "iam.googleapis.com", "accesscontextmanager.googleapis.com", "secretmanager.googleapis.com", "run.googleapis.com", "cloudbilling.googleapis.com", "monitoring.googleapis.com", "sqladmin.googleapis.com", "serviceusage.googleapis.com", "servicenetworking.googleapis.com", "workflows.googleapis.com"]
+  activate_apis               = ["compute.googleapis.com", "secretmanager.googleapis.com", "pubsub.googleapis.com", "cloudscheduler.googleapis.com", "servicenetworking.googleapis.com", "workflows.googleapis.com", "cloudresourcemanager.googleapis.com", "run.googleapis.com", "accesscontextmanager.googleapis.com", "cloudbilling.googleapis.com", "serviceusage.googleapis.com", "iam.googleapis.com", "storage-api.googleapis.com", "cloudkms.googleapis.com", "sqladmin.googleapis.com", "monitoring.googleapis.com"]
 }
